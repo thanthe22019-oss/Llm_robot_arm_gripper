@@ -1,0 +1,86 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://wiki.ros.org/xacro" name="$(arg name)">
+  <!-- The official UR top-level xacro declares all UR launch arguments and
+       creates the arm, world attachment, ros2_control system, and Gazebo plugin. -->
+  <xacro:include filename="$(find ur_description)/urdf/ur.urdf.xacro"/>
+  <xacro:include filename="$(find robotiq_description)/urdf/robotiq_2f_85_macro.urdf.xacro"/>
+
+  <!-- In the Robotiq repository sim_gazebo selects Gazebo Sim / gz_ros2_control.
+       The UR Humble package calls the same simulator mode sim_ignition. -->
+  <xacro:robotiq_gripper
+    name="$(arg tf_prefix)robotiq_2f_85"
+    prefix="$(arg tf_prefix)"
+    parent="$(arg tf_prefix)tool0"
+    sim_gazebo="$(arg sim_ignition)"
+    include_ros2_control="true"
+    gripper_closed_position="0.0">
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+  </xacro:robotiq_gripper>
+
+  <!-- Grasp frame at the centre of the finger-pad overlap.  The official
+       meshes span roughly z=0.106..0.163 m; 0.135 m places a 40 mm cube
+       between the pads instead of at the outer fingertip plane. -->
+  <link name="$(arg tf_prefix)gripper_tcp"/>
+  <joint name="$(arg tf_prefix)gripper_tcp_joint" type="fixed">
+    <parent link="$(arg tf_prefix)robotiq_85_base_link"/>
+    <child link="$(arg tf_prefix)gripper_tcp"/>
+    <origin xyz="0 0 0.135" rpy="0 0 0"/>
+  </joint>
+
+  <!-- Fixed overhead camera. Gazebo cameras look along +X, so rotating the
+       camera link +90 deg around Y points its optical axis toward -Z and
+       centres the full 0.44 x 0.48 m tabletop in the image. -->
+  <link name="$(arg tf_prefix)camera_link">
+    <inertial>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <mass value="0.05"/>
+      <inertia ixx="0.00001" ixy="0" ixz="0"
+               iyy="0.00001" iyz="0" izz="0.00001"/>
+    </inertial>
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry><box size="0.05 0.04 0.04"/></geometry>
+      <material name="camera_dark"><color rgba="0.08 0.08 0.08 1"/></material>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry><box size="0.05 0.04 0.04"/></geometry>
+    </collision>
+  </link>
+  <joint name="$(arg tf_prefix)world_to_camera_joint" type="fixed">
+    <parent link="world"/>
+    <child link="$(arg tf_prefix)camera_link"/>
+    <origin xyz="0.31 0 0.90" rpy="0 1.57079632679 0"/>
+  </joint>
+
+  <!-- Standard ROS optical convention: +Z forward, +X right, +Y down. -->
+  <link name="$(arg tf_prefix)camera_optical_frame"/>
+  <joint name="$(arg tf_prefix)camera_optical_joint" type="fixed">
+    <parent link="$(arg tf_prefix)camera_link"/>
+    <child link="$(arg tf_prefix)camera_optical_frame"/>
+    <origin xyz="0 0 0" rpy="-1.57079632679 0 -1.57079632679"/>
+  </joint>
+
+  <gazebo reference="$(arg tf_prefix)camera_link">
+    <sensor name="overhead_camera" type="camera">
+      <pose>0 0 0 0 0 0</pose>
+      <always_on>true</always_on>
+      <update_rate>15</update_rate>
+      <visualize>true</visualize>
+      <topic>/camera</topic>
+      <camera>
+        <horizontal_fov>1.0471975512</horizontal_fov>
+        <image>
+          <width>640</width>
+          <height>480</height>
+          <format>R8G8B8</format>
+        </image>
+        <clip><near>0.05</near><far>3.0</far></clip>
+        <distortion>
+          <k1>0</k1><k2>0</k2><k3>0</k3><p1>0</p1><p2>0</p2>
+          <center>0.5 0.5</center>
+        </distortion>
+      </camera>
+    </sensor>
+  </gazebo>
+</robot>

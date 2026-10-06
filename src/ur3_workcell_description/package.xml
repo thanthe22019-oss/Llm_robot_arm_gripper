@@ -1,0 +1,30 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>ur3_workcell_description</name>
+  <version>0.1.0</version>
+  <description>UR3/UR3e workcell with a Robotiq 2F-85 gripper and overhead camera.</description>
+  <maintainer email="alex@example.com">Alex</maintainer>
+  <license>BSD-3-Clause</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <depend>controller_manager</depend>
+  <depend>control_msgs</depend>
+  <depend>gripper_controllers</depend>
+  <depend>gz_ros2_control</depend>
+  <depend>joint_state_broadcaster</depend>
+  <depend>joint_trajectory_controller</depend>
+  <depend>robotiq_description</depend>
+  <depend>robot_state_publisher</depend>
+  <depend>ur_description</depend>
+  <depend>ur_moveit_config</depend>
+  <depend>xacro</depend>
+
+  <test_depend>ament_cmake_pytest</test_depend>
+  <test_depend>python3-pytest</test_depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>

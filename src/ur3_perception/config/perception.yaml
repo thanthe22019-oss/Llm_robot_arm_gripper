@@ -1,0 +1,31 @@
+perception:
+  minimum_area_px: 450.0
+  maximum_area_px: 2400.0
+  expected_area_px: 1300.0
+  minimum_aspect_ratio: 0.55
+  maximum_aspect_ratio: 1.80
+  morphology_kernel_px: 3
+  table_margin_m: 0.015
+  publish_rate_hz: 5.0
+  stale_after_sec: 1.0
+
+  # HSV ranges are narrower than the translucent zone markers and orange UR
+  # links. Area and shape checks reject large robot parts.
+  colors:
+    red_cube:
+      - lower: [0, 130, 90]
+        upper: [12, 255, 255]
+      - lower: [170, 130, 90]
+        upper: [179, 255, 255]
+    yellow_cube:
+      - lower: [18, 120, 100]
+        upper: [42, 255, 255]
+    blue_cube:
+      - lower: [95, 120, 80]
+        upper: [135, 255, 255]
+    green_cube:
+      - lower: [40, 90, 70]
+        upper: [90, 255, 255]
+    purple_cube:
+      - lower: [130, 80, 60]
+        upper: [169, 255, 255]

@@ -1,0 +1,46 @@
+--- a/urdf/2f_common.ros2_control.xacro
++++ b/urdf/2f_common.ros2_control.xacro
+@@ -51,15 +51,16 @@
+         </hardware>
+     </xacro:macro>
+
+-    <!-- A mimic joint the simulator owns: declared so /joint_states carries it,
+-         but never commanded. Gazebo derives mimic joints itself, so it gets no
+-         state interfaces either. -->
+-    <xacro:macro name="robotiq_2f_sim_mimic_joint" params="name sim_gazebo">
++    <!-- Bai03 mimic compatibility v2: gz_ros2_control 0.7.x reads mimic and
++         multiplier from ros2_control joint parameters. State interfaces keep
++         the passive joints registered with the Gazebo hardware system. -->
++    <xacro:macro name="robotiq_2f_sim_mimic_joint"
++                 params="name sim_gazebo mimic multiplier:=1.0">
+         <joint name="${name}">
+-            <xacro:unless value="${sim_gazebo}">
+-                <state_interface name="position"/>
+-                <state_interface name="velocity"/>
+-            </xacro:unless>
++            <param name="mimic">${mimic}</param>
++            <param name="multiplier">${multiplier}</param>
++            <state_interface name="position"/>
++            <state_interface name="velocity"/>
+         </joint>
+     </xacro:macro>
+
+--- a/urdf/2f_85.ros2_control.xacro
++++ b/urdf/2f_85.ros2_control.xacro
+@@ -66,11 +66,11 @@
+             </joint>
+             <!-- When simulating we need to include the rest of the gripper joints -->
+             <xacro:if value="${sim_topic_based or sim_gazebo}">
+-                <xacro:robotiq_2f_sim_mimic_joint name="${prefix}robotiq_85_right_knuckle_joint" sim_gazebo="${sim_gazebo}"/>
+-                <xacro:robotiq_2f_sim_mimic_joint name="${prefix}robotiq_85_left_inner_knuckle_joint" sim_gazebo="${sim_gazebo}"/>
+-                <xacro:robotiq_2f_sim_mimic_joint name="${prefix}robotiq_85_right_inner_knuckle_joint" sim_gazebo="${sim_gazebo}"/>
+-                <xacro:robotiq_2f_sim_mimic_joint name="${prefix}robotiq_85_left_finger_tip_joint" sim_gazebo="${sim_gazebo}"/>
+-                <xacro:robotiq_2f_sim_mimic_joint name="${prefix}robotiq_85_right_finger_tip_joint" sim_gazebo="${sim_gazebo}"/>
++                <xacro:robotiq_2f_sim_mimic_joint name="${prefix}robotiq_85_right_knuckle_joint" sim_gazebo="${sim_gazebo}" mimic="${prefix}robotiq_85_left_knuckle_joint" multiplier="-1.0"/>
++                <xacro:robotiq_2f_sim_mimic_joint name="${prefix}robotiq_85_left_inner_knuckle_joint" sim_gazebo="${sim_gazebo}" mimic="${prefix}robotiq_85_left_knuckle_joint" multiplier="1.0"/>
++                <xacro:robotiq_2f_sim_mimic_joint name="${prefix}robotiq_85_right_inner_knuckle_joint" sim_gazebo="${sim_gazebo}" mimic="${prefix}robotiq_85_left_knuckle_joint" multiplier="-1.0"/>
++                <xacro:robotiq_2f_sim_mimic_joint name="${prefix}robotiq_85_left_finger_tip_joint" sim_gazebo="${sim_gazebo}" mimic="${prefix}robotiq_85_left_knuckle_joint" multiplier="-1.0"/>
++                <xacro:robotiq_2f_sim_mimic_joint name="${prefix}robotiq_85_right_finger_tip_joint" sim_gazebo="${sim_gazebo}" mimic="${prefix}robotiq_85_left_knuckle_joint" multiplier="1.0"/>
+             </xacro:if>
+
+             <!-- Only add this with fake hardware mode -->

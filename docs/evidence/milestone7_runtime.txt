@@ -1,0 +1,31 @@
+KỊCH BẢN KIỂM THỬ END-TO-END — 04/10/2026
+
+Command: Đưa khối đỏ sang vùng B.
+Planner: mock (cùng state-aware contract với LLM provider)
+Scenario: scene_blocked.yaml
+
+CAMERA STATE: version 1
+
+LLM PLAN:
+{"scene_version":1,"goal":{"object":"red_cube","destination":"zone_b"},"plan":[{"skill":"check_zone","zone":"zone_b"},{"skill":"pick","object":"blue_cube"},{"skill":"place_temp","object":"blue_cube","slot":"temp_1"},{"skill":"home"},{"skill":"pick","object":"red_cube"},{"skill":"place","object":"red_cube","zone":"zone_b"},{"skill":"home"}]}
+
+VALIDATION: SUCCESS
+
+check_zone(zone_b) ...................... SUCCESS
+pick(blue_cube) ......................... SUCCESS
+place_temp(blue_cube, temp_1) ........... SUCCESS
+home() .................................. SUCCESS
+pick(red_cube) .......................... SUCCESS
+place(red_cube, zone_b) ................. SUCCESS
+home() .................................. SUCCESS
+
+CAMERA POST-CONDITION:
+- blue_cube.location = temp_1, confidence = 0.9016
+- red_cube.location = zone_b, confidence = 0.8809
+- temp_1 occupied by blue_cube
+- zone_b occupied by red_cube
+
+TASK SUCCESS
+
+REGRESSION:
+127 passed in 26.75s

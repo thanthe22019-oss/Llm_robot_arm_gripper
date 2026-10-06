@@ -1,0 +1,57 @@
+scene:
+  frame_id: base_link
+  world_name: empty
+
+  # Milestone 1 blocked scenario: blue_cube starts in zone_b. The remaining
+  # geometry matches scene_clear.yaml so tests isolate the occupancy change.
+  floor:
+    pose: [0.0, 0.0, -0.01, 0.0, 0.0, 0.0]
+    size: [2.0, 2.0, 0.02]
+    color: [0.45, 0.45, 0.45, 1.0]
+
+  table:
+    pose: [0.31, 0.0, 0.14, 0.0, 0.0, 0.0]
+    size: [0.44, 0.48, 0.04]
+    color: [0.42, 0.25, 0.10, 1.0]
+
+  objects:
+    red_cube:
+      pose: [0.20, 0.18, 0.18, 0.0, 0.0, 0.0]
+      size: [0.04, 0.04, 0.04]
+      color: [0.90, 0.05, 0.05, 1.0]
+    yellow_cube:
+      pose: [0.20, 0.06, 0.18, 0.0, 0.0, 0.0]
+      size: [0.04, 0.04, 0.04]
+      color: [0.95, 0.80, 0.05, 1.0]
+    blue_cube:
+      pose: [0.32, 0.06, 0.18, 0.0, 0.0, 0.0]
+      size: [0.04, 0.04, 0.04]
+      color: [0.05, 0.20, 0.90, 1.0]
+    green_cube:
+      pose: [0.20, -0.18, 0.18, 0.0, 0.0, 0.0]
+      size: [0.04, 0.04, 0.04]
+      color: [0.05, 0.75, 0.15, 1.0]
+    purple_cube:
+      pose: [0.44, -0.18, 0.18, 0.0, 0.0, 0.0]
+      size: [0.04, 0.04, 0.04]
+      color: [0.55, 0.10, 0.75, 1.0]
+
+  zones:
+    zone_a:
+      pose: [0.32, 0.18, 0.159, 0.0, 0.0, 0.0]
+      size: [0.09, 0.09, 0.002]
+      color: [0.38, 0.38, 0.38, 0.45]
+    zone_b:
+      pose: [0.32, 0.06, 0.159, 0.0, 0.0, 0.0]
+      size: [0.09, 0.09, 0.002]
+      color: [0.46, 0.46, 0.46, 0.45]
+    zone_c:
+      pose: [0.32, -0.06, 0.159, 0.0, 0.0, 0.0]
+      size: [0.09, 0.09, 0.002]
+      color: [0.54, 0.54, 0.54, 0.45]
+
+  temporary_slots:
+    temp_1:
+      pose: [0.44, 0.06, 0.159, 0.0, 0.0, 0.0]
+      size: [0.08, 0.08, 0.002]
+      color: [0.10, 0.85, 0.85, 0.40]

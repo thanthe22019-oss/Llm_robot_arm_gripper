@@ -1,0 +1,5 @@
+repositories:
+  third_party/robotiq_ros:
+    type: git
+    url: https://github.com/robotiq/ros.git
+    version: main

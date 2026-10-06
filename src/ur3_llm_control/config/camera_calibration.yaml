@@ -1,0 +1,27 @@
+camera:
+  image_width: 640
+  image_height: 480
+  frame_id: ur/camera_link/overhead_camera
+  optical_frame: camera_optical_frame
+  table_z: 0.16
+
+  # Measured from /camera/camera_info in Gazebo Fortress.
+  camera_matrix:
+    - [554.2562866210938, 0.0, 320.0]
+    - [0.0, 554.2563056945801, 240.0]
+    - [0.0, 0.0, 1.0]
+
+  # Pose of camera_optical_frame in world. Its +Z axis points down at the table.
+  world_from_optical:
+    translation: [0.31, 0.0, 0.90]
+    rotation:
+      - [0.0, -1.0, 0.0]
+      - [-1.0, 0.0, 0.0]
+      - [0.0, 0.0, -1.0]
+
+  # [world_x, world_y, 1]^T ~ H * [pixel_u, pixel_v, 1]^T
+  # for the tabletop plane z=0.16 m.
+  image_to_table_homography:
+    - [0.0, -0.0013351223836283658, 0.6304293720708078]
+    - [-0.0013351224295736067, 0.0, 0.42723917746355417]
+    - [0.0, 0.0, 1.0]

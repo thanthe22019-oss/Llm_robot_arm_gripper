@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<robot xmlns:xacro="http://wiki.ros.org/xacro" name="$(arg name)">
+  <xacro:arg name="name" default="ur"/>
+  <xacro:arg name="prefix" default=""/>
+  <xacro:include filename="$(find ur_moveit_config)/srdf/ur_macro.srdf.xacro"/>
+
+  <xacro:ur_srdf name="$(arg name)" prefix="$(arg prefix)"/>
+
+  <group name="$(arg prefix)gripper">
+    <joint name="$(arg prefix)robotiq_85_left_knuckle_joint"/>
+    <link name="$(arg prefix)robotiq_85_base_link"/>
+    <link name="$(arg prefix)robotiq_85_left_knuckle_link"/>
+    <link name="$(arg prefix)robotiq_85_left_finger_link"/>
+    <link name="$(arg prefix)robotiq_85_left_finger_tip_link"/>
+    <link name="$(arg prefix)robotiq_85_left_inner_knuckle_link"/>
+    <link name="$(arg prefix)robotiq_85_right_knuckle_link"/>
+    <link name="$(arg prefix)robotiq_85_right_finger_link"/>
+    <link name="$(arg prefix)robotiq_85_right_finger_tip_link"/>
+    <link name="$(arg prefix)robotiq_85_right_inner_knuckle_link"/>
+    <link name="$(arg prefix)gripper_tcp"/>
+  </group>
+
+  <group_state name="open" group="$(arg prefix)gripper">
+    <joint name="$(arg prefix)robotiq_85_left_knuckle_joint" value="0.0"/>
+  </group_state>
+  <group_state name="closed" group="$(arg prefix)gripper">
+    <joint name="$(arg prefix)robotiq_85_left_knuckle_joint" value="0.7929"/>
+  </group_state>
+
+  <end_effector
+    name="$(arg prefix)robotiq_2f_85"
+    parent_link="$(arg prefix)tool0"
+    group="$(arg prefix)gripper"
+    parent_group="$(arg prefix)$(arg name)_manipulator"/>
+
+  <disable_collisions link1="$(arg prefix)tool0" link2="$(arg prefix)robotiq_85_base_link" reason="Adjacent"/>
+  <disable_collisions link1="$(arg prefix)wrist_3_link" link2="$(arg prefix)robotiq_85_base_link" reason="Never"/>
+  <disable_collisions link1="$(arg prefix)robotiq_85_base_link" link2="$(arg prefix)robotiq_85_left_knuckle_link" reason="Adjacent"/>
+  <disable_collisions link1="$(arg prefix)robotiq_85_base_link" link2="$(arg prefix)robotiq_85_right_knuckle_link" reason="Adjacent"/>
+  <disable_collisions link1="$(arg prefix)robotiq_85_base_link" link2="$(arg prefix)robotiq_85_left_inner_knuckle_link" reason="Adjacent"/>
+  <disable_collisions link1="$(arg prefix)robotiq_85_base_link" link2="$(arg prefix)robotiq_85_right_inner_knuckle_link" reason="Adjacent"/>
+  <disable_collisions link1="$(arg prefix)robotiq_85_left_knuckle_link" link2="$(arg prefix)robotiq_85_left_finger_link" reason="Adjacent"/>
+  <disable_collisions link1="$(arg prefix)robotiq_85_right_knuckle_link" link2="$(arg prefix)robotiq_85_right_finger_link" reason="Adjacent"/>
+  <disable_collisions link1="$(arg prefix)robotiq_85_left_finger_link" link2="$(arg prefix)robotiq_85_left_finger_tip_link" reason="Adjacent"/>
+  <disable_collisions link1="$(arg prefix)robotiq_85_right_finger_link" link2="$(arg prefix)robotiq_85_right_finger_tip_link" reason="Adjacent"/>
+  <!-- Each fingertip rests against the inner four-bar link throughout normal
+       motion.  They are separate URDF branches, so MoveIt cannot infer this
+       mechanical adjacency and must be told to ignore the permanent contact. -->
+  <disable_collisions link1="$(arg prefix)robotiq_85_left_finger_tip_link" link2="$(arg prefix)robotiq_85_left_inner_knuckle_link" reason="Adjacent"/>
+  <disable_collisions link1="$(arg prefix)robotiq_85_right_finger_tip_link" link2="$(arg prefix)robotiq_85_right_inner_knuckle_link" reason="Adjacent"/>
+</robot>

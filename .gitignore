@@ -1,0 +1,13 @@
+/build/
+/install/
+/log/
+/.vscode/
+/third_party/
+__pycache__/
+.pytest_cache/
+*.py[cod]
+*.rar
+*.zip
+.env
+.env.*
+!.env.example

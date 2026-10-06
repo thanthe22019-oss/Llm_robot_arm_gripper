@@ -1,0 +1,359 @@
+#!/usr/bin/env python3
+"""Plan, validate, and execute UR3 robot skills through a ROS 2 action."""
+
+import argparse
+import json
+import os
+from pathlib import Path
+import sys
+
+from ament_index_python.packages import get_package_share_directory
+import rclpy
+from action_msgs.msg import GoalStatus
+from rclpy.action import ActionClient
+from rclpy.node import Node
+from std_srvs.srv import Trigger
+
+from ur3_llm_control.gemini_planner import (
+    DEFAULT_MODEL as DEFAULT_GEMINI_MODEL,
+    GeminiPlanner,
+)
+from ur3_llm_control.llm_planner import MockLLMPlanner, PlannerError
+from ur3_llm_control.openai_planner import OpenAIPlanner
+from ur3_llm_control.robot_skills import request_from_plan_step
+from ur3_llm_control.scene_guard import SceneChangedError, SceneGuard
+from ur3_llm_control.skill_executor import SkillResult, execute_validated_plan
+from ur3_llm_control.student_config import load_student_config
+from ur3_llm_control.task_validator import (
+    PlanValidationError,
+    parse_and_validate_plan,
+    validate_state_aware_plan,
+)
+from ur3_robot_skills.action import ExecuteSkill
+
+
+class RobotSkillClient(Node):
+    """Translate canonical plan steps into ExecuteSkill action goals."""
+
+    def __init__(self, step_timeout_seconds):
+        super().__init__('skill_executor')
+        self._client = ActionClient(self, ExecuteSkill, 'execute_skill')
+        self._scene_client = self.create_client(Trigger, '/get_scene_state')
+        self._step_timeout_seconds = step_timeout_seconds
+        self._zone_lookahead = []
+        self._step_index = 0
+        self._scene_guard = None
+
+    def configure_plan(self, plan, scene_state=None):
+        """Cache each pick's validated following place zone for IK scoring."""
+        self._zone_lookahead = [''] * len(plan)
+        for index, step in enumerate(plan[:-1]):
+            following = plan[index + 1]
+            if (
+                step.skill == 'pick'
+                and following.skill in {'place', 'place_temp'}
+                and following.object_name == step.object_name
+            ):
+                self._zone_lookahead[index] = following.zone_name or ''
+        self._step_index = 0
+        self._scene_guard = (
+            SceneGuard(scene_state) if scene_state is not None else None
+        )
+
+    def wait_for_server(self, timeout_seconds):
+        """Wait until the robot skill action server is ready."""
+        return self._client.wait_for_server(timeout_sec=timeout_seconds)
+
+    def get_scene_state(self, timeout_seconds=5.0, require_valid=True):
+        """Return the latest camera JSON, including invalid held-object frames."""
+        if not self._scene_client.wait_for_service(timeout_sec=timeout_seconds):
+            raise PlanValidationError(
+                'INVALID_SCENE', '/get_scene_state service is unavailable'
+            )
+        future = self._scene_client.call_async(Trigger.Request())
+        rclpy.spin_until_future_complete(self, future, timeout_sec=timeout_seconds)
+        if not future.done() or future.result() is None:
+            raise PlanValidationError(
+                'INVALID_SCENE', 'camera SceneState request timed out'
+            )
+        response = future.result()
+        try:
+            state = json.loads(response.message)
+        except json.JSONDecodeError as error:
+            raise PlanValidationError(
+                'INVALID_SCENE', 'camera returned malformed SceneState JSON'
+            ) from error
+        if require_valid and not response.success:
+            raise PlanValidationError(
+                'INVALID_SCENE',
+                'camera SceneState is stale or invalid: '
+                + str(state.get('issues', [])),
+            )
+        return state
+
+    def run_skill(self, step):
+        """Send one validated step and wait for its terminal result."""
+        if self._scene_guard is not None and step.skill in {
+            'check_zone', 'pick', 'place', 'place_temp'
+        }:
+            try:
+                state = self.get_scene_state(
+                    require_valid=step.skill in {'check_zone', 'pick'}
+                )
+                self._scene_guard.check_before(step, state)
+            except (PlanValidationError, SceneChangedError) as error:
+                return SkillResult(-1, 'SCENE_CHANGED', str(error))
+
+        request = request_from_plan_step(step)
+        goal = ExecuteSkill.Goal()
+        goal.skill = request.skill
+        goal.object_name = request.object_name
+        goal.zone_name = request.zone_name
+        if (
+            request.skill == 'pick'
+            and self._step_index < len(self._zone_lookahead)
+        ):
+            goal.zone_name = self._zone_lookahead[self._step_index]
+        self._step_index += 1
+
+        send_future = self._client.send_goal_async(
+            goal,
+            feedback_callback=self._feedback_callback,
+        )
+        rclpy.spin_until_future_complete(
+            self,
+            send_future,
+            timeout_sec=self._step_timeout_seconds,
+        )
+        if not send_future.done():
+            return SkillResult(-1, 'GOAL_TIMEOUT', 'timed out sending goal')
+
+        try:
+            goal_handle = send_future.result()
+        except Exception as error:
+            return SkillResult(-1, 'ACTION_ERROR', str(error))
+        if goal_handle is None or not goal_handle.accepted:
+            return SkillResult(-1, 'GOAL_REJECTED', 'skill server rejected goal')
+
+        result_future = goal_handle.get_result_async()
+        rclpy.spin_until_future_complete(
+            self,
+            result_future,
+            timeout_sec=self._step_timeout_seconds,
+        )
+        if not result_future.done():
+            goal_handle.cancel_goal_async()
+            return SkillResult(
+                -1,
+                'RESULT_TIMEOUT',
+                f'no result after {self._step_timeout_seconds:.1f} seconds',
+            )
+
+        try:
+            wrapped_result = result_future.result()
+        except Exception as error:
+            return SkillResult(-1, 'ACTION_ERROR', str(error))
+        if wrapped_result is None:
+            return SkillResult(-1, 'ACTION_ERROR', 'empty action result')
+        if wrapped_result.status != GoalStatus.STATUS_SUCCEEDED:
+            return SkillResult(
+                -1,
+                'ACTION_FAILED',
+                f'action goal ended with status {wrapped_result.status}',
+            )
+
+        result = wrapped_result.result
+        skill_result = SkillResult(
+            code=int(result.code),
+            status=result.status,
+            message=result.message,
+        )
+        if skill_result.succeeded and self._scene_guard is not None:
+            self._scene_guard.apply_success(step)
+        return skill_result
+
+    def _feedback_callback(self, feedback_message):
+        phase = feedback_message.feedback.phase
+        self.get_logger().info(f'  phase: {phase}')
+
+
+def _default_student_config():
+    return (
+        Path(get_package_share_directory('ur3_llm_control'))
+        / 'config'
+        / 'student_config.yaml'
+    )
+
+
+def _parse_bool(value):
+    normalized = str(value).strip().lower()
+    if normalized in {'1', 'true', 'yes', 'on'}:
+        return True
+    if normalized in {'0', 'false', 'no', 'off'}:
+        return False
+    raise argparse.ArgumentTypeError('expected true or false')
+
+
+def _parse_arguments(arguments):
+    parser = argparse.ArgumentParser(
+        description='Plan, validate, and execute UR3 robot skills.'
+    )
+    source = parser.add_mutually_exclusive_group(required=True)
+    source.add_argument('--json', help='raw JSON plan')
+    source.add_argument('--file', type=Path, help='path to a JSON plan')
+    source.add_argument('--command', help='natural-language robot command')
+    parser.add_argument(
+        '--planner',
+        choices=['gemini', 'openai', 'mock'],
+        default='gemini',
+        help='planner used with --command',
+    )
+    parser.add_argument(
+        '--model',
+        default=None,
+        help='provider model; defaults to GEMINI_MODEL or OPENAI_MODEL',
+    )
+    parser.add_argument(
+        '--api-timeout-seconds',
+        '--openai-timeout-seconds',
+        dest='api_timeout_seconds',
+        type=float,
+        default=30.0,
+    )
+    parser.add_argument(
+        '--fallback-to-mock',
+        type=_parse_bool,
+        default=False,
+    )
+    parser.add_argument(
+        '--student-config',
+        type=Path,
+        default=_default_student_config(),
+    )
+    parser.add_argument('--server-wait-seconds', type=float, default=120.0)
+    parser.add_argument('--step-timeout-seconds', type=float, default=240.0)
+    return parser.parse_known_args(arguments)
+
+
+def _generate_command_plan(options, scene_state=None):
+    config = load_student_config(str(options.student_config))
+    mock = MockLLMPlanner(config)
+    fallback = mock if options.fallback_to_mock else None
+    if options.planner == 'mock':
+        planner = mock
+    elif options.planner == 'gemini':
+        planner = GeminiPlanner(
+            model=(
+                options.model
+                or os.environ.get('GEMINI_MODEL', DEFAULT_GEMINI_MODEL)
+            ),
+            timeout_seconds=options.api_timeout_seconds,
+            fallback=fallback,
+        )
+    else:
+        planner = OpenAIPlanner(
+            model=(
+                options.model
+                or os.environ.get('OPENAI_MODEL', 'gpt-4o-mini')
+            ),
+            timeout_seconds=options.api_timeout_seconds,
+            fallback=fallback,
+        )
+    return planner.generate_plan(options.command, scene_state)
+
+
+def _print_step(execution):
+    label = execution.step.label()
+    dots = '.' * max(2, 40 - len(label))
+    print(f'{label} {dots} {execution.result.status}', flush=True)
+    if execution.result.message:
+        print(f'  {execution.result.message}', flush=True)
+
+
+def main(arguments=None):
+    """Create or load a plan, validate it, then execute every skill."""
+    cli_arguments = sys.argv[1:] if arguments is None else arguments
+    options, ros_arguments = _parse_arguments(cli_arguments)
+    rclpy.init(args=ros_arguments)
+    client = RobotSkillClient(options.step_timeout_seconds)
+    try:
+        if not client.wait_for_server(options.server_wait_seconds):
+            print('execute_skill action server .......... SERVER_UNAVAILABLE')
+            print('\nTASK FAILED')
+            return 1
+
+        attempts = 2 if options.command is not None else 1
+        for attempt in range(attempts):
+            try:
+                scene_state = None
+                if options.command is not None:
+                    scene_state = client.get_scene_state(require_valid=True)
+                    print('USER COMMAND:')
+                    print(options.command)
+                    print(f'\nCAMERA STATE: version {scene_state["version"]}')
+                    raw_json = _generate_command_plan(options, scene_state)
+                    print('\nLLM PLAN:')
+                    print(raw_json)
+                    document = json.loads(raw_json)
+                    plan = validate_state_aware_plan(document, scene_state)
+                else:
+                    raw_json = (
+                        options.file.read_text(encoding='utf-8')
+                        if options.file is not None
+                        else options.json
+                    )
+                    document = json.loads(raw_json)
+                    if isinstance(document, dict) and 'scene_version' in document:
+                        scene_state = client.get_scene_state(require_valid=True)
+                        plan = validate_state_aware_plan(document, scene_state)
+                    else:
+                        plan = parse_and_validate_plan(raw_json)
+            except (
+                OSError,
+                json.JSONDecodeError,
+                PlannerError,
+                PlanValidationError,
+            ) as error:
+                print('\nPLANNING/VALIDATION: REJECTED')
+                print(error)
+                print('\nTASK FAILED')
+                return 2
+
+            print('\nVALIDATION: SUCCESS')
+            print('\nPLAN:')
+            for index, step in enumerate(plan, start=1):
+                print(f'{index}. {step.label()}')
+
+            print('\nEXECUTION:', flush=True)
+            client.configure_plan(plan, scene_state)
+            report = execute_validated_plan(
+                plan,
+                client.run_skill,
+                _print_step,
+            )
+            if report.succeeded:
+                print('\nTASK SUCCESS')
+                return 0
+
+            failed = report.failed_step
+            can_replan = (
+                attempt == 0
+                and failed is not None
+                and failed.result.status == 'SCENE_CHANGED'
+                and failed.step.skill in {'check_zone', 'pick'}
+            )
+            if can_replan:
+                print('\nSCENE CHANGED: refreshing camera state and replanning once')
+                continue
+            print('\nTASK FAILED')
+            return 1
+        print('\nTASK FAILED')
+        return 1
+    finally:
+        client.destroy_node()
+        if rclpy.ok():
+            rclpy.shutdown()
+
+
+if __name__ == '__main__':
+    raise SystemExit(main())

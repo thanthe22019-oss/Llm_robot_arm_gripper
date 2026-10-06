@@ -1,0 +1,5 @@
+waiting for service to become available...
+requester: making request: std_srvs.srv.Trigger_Request()
+
+response:
+std_srvs.srv.Trigger_Response(success=True, message='{"frame_id":"base_link","issues":[],"objects":{"blue_cube":{"confidence":0.8823,"location":"table","pixel":{"u":366.02,"v":324.98},"visible":true,"x":0.19654,"y":-0.061445,"z":0.18},"green_cube":{"confidence":0.8657,"location":"zone_a","pixel":{"u":173.94,"v":231.56},"visible":true,"x":0.321272,"y":0.195014,"z":0.18},"purple_cube":{"confidence":0.9704,"location":"table","pixel":{"u":458.97,"v":138.93},"visible":true,"x":0.444938,"y":-0.185548,"z":0.18},"red_cube":{"confidence":0.9647,"location":"table","pixel":{"u":180.05,"v":324.56},"visible":true,"x":0.197106,"y":0.186855,"z":0.18},"yellow_cube":{"confidence":0.9092,"location":"table","pixel":{"u":272.57,"v":324.58},"visible":true,"x":0.197079,"y":0.063324,"z":0.18}},"source":"camera","stamp":120.055,"temporary_slots":{"temp_1":{"object":null,"occupied":false}},"valid":true,"version":23,"zones":{"zone_a":{"object":"green_cube","occupied":true},"zone_b":{"object":null,"occupied":false},"zone_c":{"object":null,"occupied":false}}}')
