@@ -13,8 +13,8 @@ Yêu cầu máy đã cài ROS 2 Humble, MoveIt 2, Gazebo Fortress, `colcon` và 
 
 ```bash
 cd ~/Interaction
-git clone https://github.com/thanthe22019-oss/Llm_robot_arm_gripper.git
-cd Llm_robot_arm_gripper
+git clone https://github.com/thanthe22019-oss/Llm_robot_arm_gripper.git UR3e_LLM_Gripper_Camera_Bai03
+cd UR3e_LLM_Gripper_Camera_Bai03
 
 mkdir -p third_party
 vcs import third_party < dependencies.repos
@@ -29,7 +29,7 @@ phần này. Chỉ build lại khi source hoặc file cấu hình thay đổi.
 ## 2. Chạy toàn bộ demo bằng một lệnh
 
 ```bash
-cd ~/Interaction/Llm_robot_arm_gripper
+cd ~/Interaction/UR3e_LLM_Gripper_Camera_Bai03
 ./scripts/run_demo.sh
 ```
 
@@ -59,7 +59,7 @@ GAZEBO_GUI=false LAUNCH_RVIZ=false ./scripts/run_demo.sh
 Ba zone và `temp_1` ban đầu đều trống:
 
 ```bash
-cd ~/Interaction/Llm_robot_arm_gripper
+cd ~/Interaction/UR3e_LLM_Gripper_Camera_Bai03
 source /opt/ros/humble/setup.bash
 source install/setup.bash
 
@@ -74,7 +74,7 @@ các khối.
 ### Terminal 2 — gửi một câu lệnh offline
 
 ```bash
-cd ~/Interaction/Llm_robot_arm_gripper
+cd ~/Interaction/UR3e_LLM_Gripper_Camera_Bai03
 source /opt/ros/humble/setup.bash
 source install/setup.bash
 
@@ -103,7 +103,7 @@ tiếp.
 Trong scene này, `blue_cube` nằm sẵn trong `zone_b`:
 
 ```bash
-cd ~/Interaction/Llm_robot_arm_gripper
+cd ~/Interaction/UR3e_LLM_Gripper_Camera_Bai03
 source /opt/ros/humble/setup.bash
 source install/setup.bash
 
@@ -115,7 +115,7 @@ ros2 launch ur3_robot_skills robot_skills.launch.py \
 ### Terminal 2 — yêu cầu đặt vật khác vào zone B
 
 ```bash
-cd ~/Interaction/Llm_robot_arm_gripper
+cd ~/Interaction/UR3e_LLM_Gripper_Camera_Bai03
 source /opt/ros/humble/setup.bash
 source install/setup.bash
 
@@ -143,7 +143,7 @@ export GEMINI_MODEL="gemini-3.5-flash-lite"
 ### Cách 1 — Gemini chạy toàn bộ demo bằng một lệnh
 
 ```bash
-cd ~/Interaction/Llm_robot_arm_gripper
+cd ~/Interaction/UR3e_LLM_Gripper_Camera_Bai03
 PLANNER=gemini \
 COMMAND='Đưa khối đỏ sang vùng B.' \
 ./scripts/run_demo.sh
@@ -158,7 +158,7 @@ Khởi động hệ thống ở Terminal 1 theo mục 3 hoặc mục 4. Trong Te
 môi trường, nhập API key rồi gửi lệnh:
 
 ```bash
-cd ~/Interaction/Llm_robot_arm_gripper
+cd ~/Interaction/UR3e_LLM_Gripper_Camera_Bai03
 source /opt/ros/humble/setup.bash
 source install/setup.bash
 
@@ -223,7 +223,7 @@ xanh dương”, “khối xanh lá”, “khối tím”, “ô A”, “vùng 
 Khi hệ thống đang chạy, mở terminal khác:
 
 ```bash
-cd ~/Interaction/Llm_robot_arm_gripper
+cd ~/Interaction/UR3e_LLM_Gripper_Camera_Bai03
 source /opt/ros/humble/setup.bash
 source install/setup.bash
 
@@ -251,14 +251,14 @@ Sau đó mới mở phiên chạy mới để tránh nhận dữ liệu từ sce
 Nếu báo thiếu `install/setup.bash`:
 
 ```bash
-cd ~/Interaction/Llm_robot_arm_gripper
+cd ~/Interaction/UR3e_LLM_Gripper_Camera_Bai03
 ./scripts/build_humble.sh
 ```
 
 ### Thiếu model Robotiq
 
 ```bash
-cd ~/Interaction/Llm_robot_arm_gripper
+cd ~/Interaction/UR3e_LLM_Gripper_Camera_Bai03
 mkdir -p third_party
 vcs import third_party < dependencies.repos
 ./scripts/build_humble.sh

@@ -13,7 +13,7 @@ sleep 3
 Build dự án nếu source vừa thay đổi:
 
 ```bash
-cd ~/Interaction/Llm_robot_arm_gripper
+cd ~/Interaction/UR3e_LLM_Gripper_Camera_Bai03
 ./scripts/build_humble.sh
 ```
 
@@ -22,7 +22,7 @@ cd ~/Interaction/Llm_robot_arm_gripper
 Mock planner chạy hoàn toàn offline và cho kết quả lặp lại được:
 
 ```bash
-cd ~/Interaction/Llm_robot_arm_gripper
+cd ~/Interaction/UR3e_LLM_Gripper_Camera_Bai03
 ./scripts/run_demo.sh 2>&1 | tee /tmp/bai03_demo.log
 ```
 
@@ -72,7 +72,7 @@ home()
 Tạo thư mục lưu ảnh:
 
 ```bash
-mkdir -p ~/Interaction/Llm_robot_arm_gripper/docs/images
+mkdir -p ~/Interaction/UR3e_LLM_Gripper_Camera_Bai03/docs/images
 ```
 
 Trên Ubuntu, nhấn `PrtSc` để chụp toàn màn hình hoặc `Shift+PrtSc` để chọn
@@ -89,9 +89,9 @@ Nếu robot bắt đầu quá nhanh, chạy riêng perception để giữ nguyê
 
 ```bash
 source /opt/ros/humble/setup.bash
-source ~/Interaction/Llm_robot_arm_gripper/install/setup.bash
+source ~/Interaction/UR3e_LLM_Gripper_Camera_Bai03/install/setup.bash
 ros2 launch ur3_perception perception.launch.py \
-  scene_file:=$HOME/Interaction/Llm_robot_arm_gripper/install/ur3_llm_control/share/ur3_llm_control/config/scene_blocked.yaml
+  scene_file:=$HOME/Interaction/UR3e_LLM_Gripper_Camera_Bai03/install/ur3_llm_control/share/ur3_llm_control/config/scene_blocked.yaml
 ```
 
 ### Ảnh 2 — Camera nhận dạng và trạng thái zone
@@ -138,7 +138,7 @@ Mở scene trống ở terminal thứ nhất. Lệnh này mở Gazebo và RViz n
 chạy robot:
 
 ```bash
-cd ~/Interaction/Llm_robot_arm_gripper
+cd ~/Interaction/UR3e_LLM_Gripper_Camera_Bai03
 source /opt/ros/humble/setup.bash
 source install/setup.bash
 ros2 launch ur3_robot_skills robot_skills.launch.py \
@@ -150,7 +150,7 @@ Trong terminal thứ hai, source lại môi trường rồi chạy lần lượt
 lệnh tiếp theo sau khi lệnh trước in `TASK SUCCESS` và robot đã về home:
 
 ```bash
-cd ~/Interaction/Llm_robot_arm_gripper
+cd ~/Interaction/UR3e_LLM_Gripper_Camera_Bai03
 source /opt/ros/humble/setup.bash
 source install/setup.bash
 
@@ -175,7 +175,7 @@ ros2 run ur3_robot_skills execute_plan \
 - Sau khi chạy xong, mở terminal đủ rộng và lọc ba log:
 
 ```bash
-cd ~/Interaction/Llm_robot_arm_gripper
+cd ~/Interaction/UR3e_LLM_Gripper_Camera_Bai03
 grep -H -E "placed .*verified by camera|TASK SUCCESS" \
   docs/evidence/yellow_to_zone_b_runtime.txt \
   docs/evidence/blue_to_zone_c_runtime.txt \

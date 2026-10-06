@@ -24,7 +24,7 @@ hiện yêu cầu chính và dùng camera xác minh kết quả.
 ## 2. Cấu trúc chương trình
 
 ```text
-Llm_robot_arm_gripper/
+UR3e_LLM_Gripper_Camera_Bai03/
 ├── src/
 │   ├── ur_simulation_gz/          Gazebo, ros2_control và MoveIt launch
 │   ├── ur3_workcell_description/  UR3e, Robotiq 2F-85, camera, controller
@@ -222,7 +222,7 @@ plan thay đổi; Gemini không sinh joint trajectory.
 ### 10.1. Build và chạy demo tổng
 
 ```bash
-cd ~/Interaction/Llm_robot_arm_gripper
+cd ~/Interaction/UR3e_LLM_Gripper_Camera_Bai03
 mkdir -p third_party
 vcs import third_party < dependencies.repos
 ./scripts/build_humble.sh
@@ -238,7 +238,7 @@ phụ thuộc mạng. Kết quả cuối cần có `VALIDATION: SUCCESS` và `TA
 Terminal 1:
 
 ```bash
-cd ~/Interaction/Llm_robot_arm_gripper
+cd ~/Interaction/UR3e_LLM_Gripper_Camera_Bai03
 source /opt/ros/humble/setup.bash
 source install/setup.bash
 ros2 launch ur3_robot_skills robot_skills.launch.py \
@@ -249,7 +249,7 @@ ros2 launch ur3_robot_skills robot_skills.launch.py \
 Terminal 2:
 
 ```bash
-cd ~/Interaction/Llm_robot_arm_gripper
+cd ~/Interaction/UR3e_LLM_Gripper_Camera_Bai03
 source /opt/ros/humble/setup.bash
 source install/setup.bash
 ros2 run ur3_robot_skills execute_plan \
@@ -273,7 +273,7 @@ export GEMINI_MODEL="gemini-3.5-flash-lite"
 Chạy toàn bộ tình huống zone bị chiếm bằng Gemini:
 
 ```bash
-cd ~/Interaction/Llm_robot_arm_gripper
+cd ~/Interaction/UR3e_LLM_Gripper_Camera_Bai03
 PLANNER=gemini \
 COMMAND='Đưa khối đỏ sang vùng B.' \
 ./scripts/run_demo.sh
