@@ -202,6 +202,11 @@ def test_robot_skills_use_physical_gripper_without_gazebo_pose_teleport():
     assert 'synchronizeGazeboPose(*object)' in source
     assert 'removeWorldObject(object_name)' in source
     assert 'planning_scene_.removeCollisionObjects({object_name})' in source
+    assert 'object_colors.' in source
+    assert 'applyObjectWithOriginalColor' in source
+    assert 'applyCollisionObject(collision, *color)' in source
+    assert 'publishHeldObjectColor' in source
+    assert 'scene.object_colors.push_back(object_color)' in source
     assert 'best_distance > 5.5' not in source
     assert 'releaseToolPose(placed_object_pose, object_name)' in source
     assert 'preserved wrist orientation above ' in source

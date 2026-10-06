@@ -28,6 +28,10 @@ def _create_skill_nodes(context):
     for name, slot in scene.temporary_slots.items():
         scene_parameters[f'temporary_slots.{name}.pose'] = list(slot.pose)
         scene_parameters[f'temporary_slots.{name}.size'] = list(slot.size)
+    for name, object_spec in scene.objects.items():
+        # The skill server temporarily removes a cube before grasp contact.
+        # Keep its scene color keyed by ID when the cube is added again.
+        scene_parameters[f'object_colors.{name}'] = list(object_spec.color)
 
     skill_server = Node(
         package='ur3_robot_skills',

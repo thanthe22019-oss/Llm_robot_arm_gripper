@@ -22,6 +22,7 @@ find_package(rclcpp REQUIRED)
 find_package(rclcpp_action REQUIRED)
 find_package(rosidl_default_generators REQUIRED)
 find_package(shape_msgs REQUIRED)
+find_package(std_msgs REQUIRED)
 find_package(std_srvs REQUIRED)
 
 rosidl_generate_interfaces(${PROJECT_NAME}
@@ -38,6 +39,7 @@ ament_target_dependencies(robot_skill_server
   rclcpp
   rclcpp_action
   shape_msgs
+  std_msgs
   std_srvs
 )
 target_link_libraries(robot_skill_server

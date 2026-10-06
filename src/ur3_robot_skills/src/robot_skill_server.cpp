@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <functional>
 #include <future>
+#include <iterator>
 #include <limits>
 #include <map>
 #include <memory>
@@ -30,11 +31,13 @@
 #include <moveit/trajectory_processing/iterative_time_parameterization.h>
 #include <moveit_msgs/msg/collision_object.hpp>
 #include <moveit_msgs/msg/move_it_error_codes.hpp>
+#include <moveit_msgs/msg/planning_scene.hpp>
 #include <moveit_msgs/msg/robot_trajectory.hpp>
 #include <moveit_msgs/srv/get_position_ik.hpp>
 #include <nlohmann/json.hpp>
 #include <rclcpp/rclcpp.hpp>
 #include <rclcpp_action/rclcpp_action.hpp>
+#include <std_msgs/msg/color_rgba.hpp>
 #include <std_srvs/srv/trigger.hpp>
 
 #include "ur3_robot_skills/action/execute_skill.hpp"
@@ -89,6 +92,7 @@ struct Settings
   std::vector<double> place_orientation;
   std::map<std::string, std::vector<double>> object_orientations;
   std::map<std::string, bool> object_tool_axis_approach;
+  std::map<std::string, std::vector<double>> object_colors;
   std::map<std::string, double> object_grasp_clearances;
   std::map<std::string, double> object_transfer_clearances;
   std::map<std::string, double> object_transfer_y_offsets;
@@ -236,6 +240,17 @@ Settings loadSettings(const rclcpp::Node::SharedPtr& node)
   normalize_orientation(settings.tool_orientation, "tool_orientation");
   normalize_orientation(settings.place_orientation, "place_orientation");
   for (const auto& object_name : settings.valid_objects) {
+    auto color = parameter<std::vector<double>>(
+      node, "object_colors." + object_name, {});
+    if (color.size() != 4 ||
+        std::any_of(color.begin(), color.end(), [](double value) {
+          return value < 0.0 || value > 1.0;
+        })) {
+      throw std::invalid_argument(
+              "object_colors." + object_name +
+              " must contain [r, g, b, a] values in [0, 1]");
+    }
+    settings.object_colors.emplace(object_name, std::move(color));
     auto orientation = parameter<std::vector<double>>(
       node, "object_orientations." + object_name, settings.tool_orientation);
     normalize_orientation(
@@ -395,6 +410,10 @@ public:
     move_group_(node_, settings_.planning_group)
   {
     compute_ik_client_ = node_->create_client<moveit_msgs::srv::GetPositionIK>("/compute_ik");
+    planning_scene_color_publisher_ =
+      node_->create_publisher<moveit_msgs::msg::PlanningScene>("/planning_scene", 1);
+    object_color_timer_ = node_->create_wall_timer(
+      100ms, [this]() {publishHeldObjectColor();});
     scene_state_client_ = node_->create_client<std_srvs::srv::Trigger>(
       settings_.scene_state_service);
     gripper_client_ = rclcpp_action::create_client<control_msgs::action::GripperCommand>(
@@ -801,7 +820,7 @@ private:
     }
     const auto restore_target_collision = [&]() {
         object->collision.operation = moveit_msgs::msg::CollisionObject::ADD;
-        if (!planning_scene_.applyCollisionObject(object->collision)) {
+        if (!applyObjectWithOriginalColor(object->collision)) {
           RCLCPP_ERROR(
             node_->get_logger(), "Could not restore collision object %s",
             object_name.c_str());
@@ -852,6 +871,11 @@ private:
     }
     held_object_ = object_name;
     held_info_ = *object;
+    held_color_index_.store(static_cast<int>(std::distance(
+      settings_.valid_objects.begin(),
+      std::find(
+        settings_.valid_objects.begin(), settings_.valid_objects.end(), object_name))));
+    publishHeldObjectColor();
 
     feedback("retreating with " + object_name);
     const auto retreat_pose = abovePoseForObject(*object);
@@ -1104,10 +1128,11 @@ private:
     placed_collision.primitive_poses[0] = geometry_msgs::msg::Pose();
     placed_collision.primitive_poses[0].orientation.w = 1.0;
     placed_collision.operation = moveit_msgs::msg::CollisionObject::ADD;
-    if (!planning_scene_.applyCollisionObject(placed_collision)) {
+    if (!applyObjectWithOriginalColor(placed_collision)) {
       return {Status::FAILED, "could not update object pose in MoveIt"};
     }
 
+    held_color_index_.store(-1);
     held_object_.clear();
     held_info_.reset();
     active_object_orientations_.erase(object_name);
@@ -1291,7 +1316,7 @@ private:
     object->collision.primitive_poses.front() = geometry_msgs::msg::Pose();
     object->collision.primitive_poses.front().orientation.w = 1.0;
     object->collision.operation = moveit_msgs::msg::CollisionObject::ADD;
-    if (!planning_scene_.applyCollisionObject(object->collision)) {
+    if (!applyObjectWithOriginalColor(object->collision)) {
       error = "could not synchronize camera pose for '" + object_name + "' into MoveIt";
       return std::nullopt;
     }
@@ -1795,6 +1820,52 @@ private:
     return false;
   }
 
+  std::optional<std_msgs::msg::ColorRGBA> originalObjectColor(
+    const std::string& object_name) const
+  {
+    const auto found = settings_.object_colors.find(object_name);
+    if (found == settings_.object_colors.end() || found->second.size() != 4) {
+      RCLCPP_ERROR(
+        node_->get_logger(), "No configured RViz color for %s",
+        object_name.c_str());
+      return std::nullopt;
+    }
+    std_msgs::msg::ColorRGBA color;
+    color.r = static_cast<float>(found->second[0]);
+    color.g = static_cast<float>(found->second[1]);
+    color.b = static_cast<float>(found->second[2]);
+    color.a = static_cast<float>(found->second[3]);
+    return color;
+  }
+
+  bool applyObjectWithOriginalColor(
+    const moveit_msgs::msg::CollisionObject& collision)
+  {
+    const auto color = originalObjectColor(collision.id);
+    return color && planning_scene_.applyCollisionObject(collision, *color);
+  }
+
+  void publishHeldObjectColor()
+  {
+    const int index = held_color_index_.load();
+    if (index < 0 || static_cast<std::size_t>(index) >= settings_.valid_objects.size()) {
+      return;
+    }
+    const auto& object_name = settings_.valid_objects[static_cast<std::size_t>(index)];
+    const auto color = originalObjectColor(object_name);
+    if (!color) {
+      return;
+    }
+    moveit_msgs::msg::PlanningScene scene;
+    scene.is_diff = true;
+    scene.robot_state.is_diff = true;
+    moveit_msgs::msg::ObjectColor object_color;
+    object_color.id = object_name;
+    object_color.color = *color;
+    scene.object_colors.push_back(object_color);
+    planning_scene_color_publisher_->publish(scene);
+  }
+
   struct GazeboPoseSample
   {
     geometry_msgs::msg::Pose pose;
@@ -1858,7 +1929,7 @@ private:
     object.collision.primitive_poses.front() = geometry_msgs::msg::Pose();
     object.collision.primitive_poses.front().orientation.w = 1.0;
     object.collision.operation = moveit_msgs::msg::CollisionObject::ADD;
-    if (!planning_scene_.applyCollisionObject(object.collision)) {
+    if (!applyObjectWithOriginalColor(object.collision)) {
       RCLCPP_ERROR(
         node_->get_logger(), "Could not synchronize Gazebo pose for %s into MoveIt",
         object.collision.id.c_str());
@@ -1972,12 +2043,16 @@ private:
   moveit::planning_interface::MoveGroupInterface move_group_;
   moveit::planning_interface::PlanningSceneInterface planning_scene_;
   rclcpp::Client<moveit_msgs::srv::GetPositionIK>::SharedPtr compute_ik_client_;
+  rclcpp::Publisher<moveit_msgs::msg::PlanningScene>::SharedPtr
+    planning_scene_color_publisher_;
+  rclcpp::TimerBase::SharedPtr object_color_timer_;
   rclcpp::Client<std_srvs::srv::Trigger>::SharedPtr scene_state_client_;
   rclcpp_action::Client<control_msgs::action::GripperCommand>::SharedPtr gripper_client_;
   ignition::transport::Node gazebo_node_;
   std::mutex gazebo_pose_mutex_;
   std::unordered_map<std::string, GazeboPoseSample> gazebo_object_poses_;
   std::string held_object_;
+  std::atomic<int> held_color_index_{-1};
   std::optional<ObjectInfo> held_info_;
   std::map<std::string, std::vector<double>> active_object_orientations_;
   std::shared_ptr<moveit::core::RobotState> initial_robot_state_;
