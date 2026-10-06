@@ -1,326 +1,286 @@
-# UR3e LLM Skill Planning — Bài thực hành 03
+# UR3e LLM Skill Planning với Gripper và Camera
 
-**GitHub:** [https://github.com/thanthe22019-oss/Llm_robot_arm_gripper](https://github.com/thanthe22019-oss/Llm_robot_arm_gripper)
+Repository: [thanthe22019-oss/Llm_robot_arm_gripper](https://github.com/thanthe22019-oss/Llm_robot_arm_gripper)
 
-Workspace riêng cho Bài thực hành 03, phát triển từ phần đã kiểm thử của Bài 02:
+Dự án mô phỏng UR3e trên ROS 2 Humble, MoveIt 2 và Gazebo. Người dùng có thể
+ra lệnh bằng tiếng Việt hoặc tiếng Anh; Gemini chuyển câu lệnh thành chuỗi
+robot skill, sau đó validator kiểm tra trước khi MoveIt lập trajectory và robot
+thực thi bằng gripper vật lý trong Gazebo.
 
-```text
-Natural Language Command
-  -> LLM Planner
-  -> Structured Plan + Validator
-  -> Robot Skills
-  -> MoveIt 2
-  -> UR3e + Physical Gripper
-```
+## 1. Chuẩn bị lần đầu
 
-## Trạng thái
-
-Milestone 1 đến Milestone 7 và phần kỹ thuật của Milestone 8 đã hoàn thành:
-
-- UR3e, bàn, năm block và ba zone được dựng trong Gazebo/MoveIt;
-- có một vị trí tạm an toàn `temp_1`;
-- có scenario vùng đích trống và scenario `blue_cube` chiếm `zone_b`;
-- giữ nguyên tọa độ ba cặp cube/zone từ Bài 02;
-- tích hợp model chính thức Robotiq 2F-85 vào UR3e;
-- có `GripperCommand` controller, MoveIt gripper group, end-effector và touch links;
-- `pick/place` điều khiển ngón kẹp thật trong Gazebo, không gọi `/set_pose`;
-- grasp được ổn định bằng DetachableJoint sau khi ngón kẹp đã đóng và được nhả
-  trước khi mở gripper;
-- demo độc lập đã gắp red cube, nâng 11 cm, di chuyển ngang, thả vào `zone_a`
-  và giữ pose ổn định sau 5 giây;
-- camera RGB cố định phía trên bàn publish ảnh 640×480 ở khoảng 15 Hz;
-- `/camera/image_raw`, `/camera/camera_info` và TF camera đã được bridge sang ROS 2;
-- ảnh camera nhìn thấy đủ năm block và toàn bộ vùng thao tác;
-- phép đổi pixel sang mặt phẳng bàn có sai số đo được 3,8–7,4 mm tại năm block;
-- detector HSV nhận đúng năm block từ ảnh, publish ảnh overlay và SceneState;
-- camera xác định đúng `blue_cube` chiếm `zone_b` trong scenario blocked;
-- khi di chuyển block trong Gazebo, SceneState cập nhật mà không sửa YAML;
-- robot skill lấy pose gắp từ camera, kiểm tra confidence và xác minh lại vị
-  trí sau khi thả;
-- có `observe_scene`, `check_zone`, `place_temp` và tự về `home` trước khi
-  camera kiểm tra hậu điều kiện;
-- kịch bản khó `blue_cube: zone_b -> temp_1` đã chạy vật lý thành công và
-  camera xác nhận `zone_b` trống;
-- state-aware planner tự dọn object đang chiếm zone sang temp slot trống;
-- validator mô phỏng occupancy, kiểm tra SceneState version, visibility,
-  confidence, held object, zone trống và goal cuối;
-- Gemini/OpenAI/mock planner nhận trực tiếp SceneState camera cùng câu lệnh;
-- executor kiểm tra lại scene ngay trước từng skill và replan an toàn tối đa
-  một lần khi state đổi;
-- demo tiếng Việt đã dọn `blue_cube` sang `temp_1`, đặt `red_cube` vào
-  `zone_b` và kết thúc `TASK SUCCESS`;
-- 129 test Python/structural/Gazebo đều đạt.
-- có script chạy demo một lệnh, log tham chiếu, báo cáo tiếng Việt và hướng
-  dẫn chụp ảnh/quay video bàn giao.
-
-Các tọa độ object trong file scene chỉ là ground truth để Gazebo spawn model.
-`ur3_perception` không đưa các pose đó vào trạng thái quan sát; vị trí block và
-occupancy đều được suy ra từ ảnh camera.
-
-## Cấu trúc
-
-```text
-src/
-├── ur_simulation_gz/     Gazebo Fortress và MoveIt 2 cho UR3e
-├── ur3_llm_control/      Scenario, planner, validator và cấu hình MSSV
-├── ur3_perception/       Nhận dạng block, overlay và SceneState từ camera
-├── ur3_robot_skills/     MoveIt skills, gripper action server và executor
-└── ur3_workcell_description/ UR3e + Robotiq 2F-85 cho Gazebo/MoveIt
-third_party/              Dependency cục bộ, không đưa vào Git
-scripts/build_humble.sh   Build bằng CMake hệ thống tương thích ROS Humble
-scripts/run_demo.sh       Chạy toàn bộ kịch bản zone bị chiếm bằng một lệnh
-docs/BAI_03_MILESTONES.md
-```
-
-## Chạy demo tổng bằng một lệnh
+Yêu cầu máy đã cài ROS 2 Humble, MoveIt 2, Gazebo Fortress, `colcon` và `vcs`.
 
 ```bash
-cd ~/Interaction/UR3e_LLM_Gripper_Camera_Bai03
+cd ~/Interaction
+git clone https://github.com/thanthe22019-oss/Llm_robot_arm_gripper.git
+cd Llm_robot_arm_gripper
+
+mkdir -p third_party
+vcs import third_party < dependencies.repos
+python3 -m pip install --user google-genai
+
+./scripts/build_humble.sh
+```
+
+Nếu đã clone repository và build thành công thì các lần sau không cần làm lại
+phần này. Chỉ build lại khi source hoặc file cấu hình thay đổi.
+
+## 2. Chạy toàn bộ demo bằng một lệnh
+
+```bash
+cd ~/Interaction/Llm_robot_arm_gripper
 ./scripts/run_demo.sh
 ```
 
-Lệnh mặc định dùng mock planner để chạy offline, nhưng vẫn đi qua camera,
-state-aware validator, MoveIt, gripper và Gazebo thật. Hướng dẫn chụp ảnh,
-quay video và chạy với Gemini nằm tại
-[`docs/HUONG_DAN_DEMO_VA_CHUP_ANH.md`](docs/HUONG_DAN_DEMO_VA_CHUP_ANH.md).
-Bản báo cáo có sẵn placeholder ảnh và link tại
-[`docs/BAO_CAO_BAI_03.md`](docs/BAO_CAO_BAI_03.md).
+Lệnh này tự mở Gazebo, RViz, camera, MoveIt, robot skill server và executor.
+Scene mặc định là tình huống `blue_cube` đang chiếm `zone_b`. Planner offline
+sẽ dọn khối xanh dương sang `temp_1`, đặt khối đỏ vào `zone_b`, rồi đưa robot
+về home.
 
-## Build
-
-```bash
-cd ~/Interaction/UR3e_LLM_Gripper_Camera_Bai03
-./scripts/build_humble.sh
-source /opt/ros/humble/setup.bash
-source install/setup.bash
-```
-
-Nên dùng script trên thay vì gọi `colcon build` trực tiếp. Máy hiện có CMake cài
-bằng pip ở `~/.local/bin`; script ép dùng `/usr/bin/cmake` 3.22 để tương thích
-ROS 2 Humble và tránh lỗi `FindPythonInterp.cmake`.
-
-## Chạy scenario clear
-
-Scenario mặc định có cả ba zone và `temp_1` đang trống:
-
-```bash
-cd ~/Interaction/UR3e_LLM_Gripper_Camera_Bai03
-source /opt/ros/humble/setup.bash
-source install/setup.bash
-ros2 launch ur3_llm_control llm_robot.launch.py
-```
-
-## Chạy scenario zone B bị chiếm
-
-Trong scenario này, `blue_cube` nằm trong `zone_b`, còn `red_cube` nằm ngoài:
-
-```bash
-cd ~/Interaction/UR3e_LLM_Gripper_Camera_Bai03
-source /opt/ros/humble/setup.bash
-source install/setup.bash
-ros2 launch ur3_llm_control llm_robot.launch.py \
-  scene_file:=$PWD/install/ur3_llm_control/share/ur3_llm_control/config/scene_blocked.yaml
-```
-
-Để kiểm tra không mở Gazebo GUI và RViz:
-
-```bash
-ros2 launch ur3_llm_control llm_robot.launch.py \
-  gazebo_gui:=false \
-  launch_rviz:=false \
-  scene_file:=$PWD/install/ur3_llm_control/share/ur3_llm_control/config/scene_blocked.yaml
-```
-
-Nhấn `Ctrl+C` trong terminal chạy launch để dừng toàn bộ hệ thống.
-
-## Kiểm tra camera và hiệu chuẩn — Milestone 3
-
-Sau khi chạy `llm_robot.launch.py`, mở terminal khác và dùng:
-
-```bash
-cd ~/Interaction/UR3e_LLM_Gripper_Camera_Bai03
-source /opt/ros/humble/setup.bash
-source install/setup.bash
-
-ros2 topic hz /camera/image_raw
-ros2 topic echo /camera/camera_info --once
-ros2 run tf2_ros tf2_echo world camera_optical_frame
-```
-
-RViz đã có display `Overhead Camera` đọc `/camera/image_raw`. Có thể kiểm tra
-phép đổi một tâm pixel sang mặt phẳng bàn bằng:
-
-```bash
-ros2 run ur3_llm_control pixel_to_table 185.184 322.388
-```
-
-Kết quả tương ứng với tâm `red_cube` là:
+Kết quả cuối terminal cần có:
 
 ```text
-x=0.200002 y=0.179996 z=0.160000
+VALIDATION: SUCCESS
+...
+TASK SUCCESS
 ```
 
-Thông số nội tại, extrinsic và homography nằm trong
-`src/ur3_llm_control/config/camera_calibration.yaml`.
-
-## Chạy perception và SceneState — Milestone 4
-
-Lệnh tổng mở mô phỏng, camera bridge, detector và RViz:
+Có thể chạy không mở giao diện để giảm tải máy:
 
 ```bash
-ros2 launch ur3_perception perception.launch.py
+GAZEBO_GUI=false LAUNCH_RVIZ=false ./scripts/run_demo.sh
 ```
 
-Đọc snapshot camera mới nhất:
+## 3. Chạy hệ thống để gửi nhiều câu lệnh
+
+### Terminal 1 — khởi động scene trống
+
+Ba zone và `temp_1` ban đầu đều trống:
 
 ```bash
-ros2 service call /get_scene_state std_srvs/srv/Trigger '{}'
+cd ~/Interaction/Llm_robot_arm_gripper
+source /opt/ros/humble/setup.bash
+source install/setup.bash
+
+ros2 launch ur3_robot_skills robot_skills.launch.py \
+  run_demo:=false \
+  scene_file:=$PWD/install/ur3_llm_control/share/ur3_llm_control/config/scene_clear.yaml
 ```
 
-Chạy tình huống `blue_cube` đang chiếm `zone_b`:
+Giữ terminal này chạy. Gazebo và RViz sẽ mở, camera bắt đầu cập nhật vị trí
+các khối.
+
+### Terminal 2 — gửi một câu lệnh offline
 
 ```bash
-ros2 launch ur3_perception perception.launch.py \
-  scene_file:=$PWD/install/ur3_llm_control/share/ur3_llm_control/config/scene_blocked.yaml
+cd ~/Interaction/Llm_robot_arm_gripper
+source /opt/ros/humble/setup.bash
+source install/setup.bash
+
+ros2 run ur3_robot_skills execute_plan \
+  --command 'Đặt khối vàng vào ô B.' \
+  --planner mock \
+  --step-timeout-seconds 300
 ```
 
-Kết quả chính cần thấy trong JSON:
+Có thể thay nội dung sau `--command` bằng các câu khác, ví dụ:
 
-```json
-{
-  "source": "camera",
-  "valid": true,
-  "objects": {"blue_cube": {"location": "zone_b"}},
-  "zones": {"zone_b": {"occupied": true, "object": "blue_cube"}}
-}
+```text
+Đặt khối xanh dương vào ô C.
+Đặt khối xanh lá vào ô A.
+Đặt khối tím vào ô B.
+Put the red cube in Zone A.
 ```
 
-RViz đọc ảnh đã đánh dấu từ `/camera/detections_image`. Service trả thất bại
-nếu chưa có ảnh, snapshot quá cũ, thiếu block hoặc trạng thái bị mơ hồ.
+Hãy đợi lệnh hiện tại in `TASK SUCCESS` và robot về home rồi mới gửi lệnh kế
+tiếp.
 
-## Chạy skill dùng camera — Milestone 5
+## 4. Chạy trường hợp zone đang bị chiếm
 
-Khởi động scenario `zone_b` bị `blue_cube` chiếm, kèm MoveIt, gripper và
-perception:
+### Terminal 1 — khởi động scene có vật cản
+
+Trong scene này, `blue_cube` nằm sẵn trong `zone_b`:
 
 ```bash
+cd ~/Interaction/Llm_robot_arm_gripper
+source /opt/ros/humble/setup.bash
+source install/setup.bash
+
 ros2 launch ur3_robot_skills robot_skills.launch.py \
   run_demo:=false \
   scene_file:=$PWD/install/ur3_llm_control/share/ur3_llm_control/config/scene_blocked.yaml
 ```
 
-Trong terminal khác, dọn khối xanh sang vị trí tạm:
+### Terminal 2 — yêu cầu đặt vật khác vào zone B
 
 ```bash
+cd ~/Interaction/Llm_robot_arm_gripper
 source /opt/ros/humble/setup.bash
 source install/setup.bash
 
-ros2 action send_goal /execute_skill ur3_robot_skills/action/ExecuteSkill \
-  "{skill: pick, object_name: blue_cube, zone_name: temp_1}" --feedback
-
-ros2 action send_goal /execute_skill ur3_robot_skills/action/ExecuteSkill \
-  "{skill: place_temp, object_name: blue_cube, zone_name: temp_1}" --feedback
+ros2 run ur3_robot_skills execute_plan \
+  --command 'Đưa khối đỏ sang vùng B.' \
+  --planner mock \
+  --step-timeout-seconds 300
 ```
 
-Kết quả cuối phải có `SUCCESS`, thông báo camera đã xác nhận `blue_cube` trong
-`temp_1`, còn `/get_scene_state` báo `zone_b.occupied=false`.
+Hệ thống sẽ dùng camera nhận ra `zone_b` bị chiếm, chuyển `blue_cube` sang
+`temp_1`, sau đó mới đặt `red_cube` vào `zone_b`.
 
-## State-aware Planner và Validator — Milestone 6
+## 5. Ra lệnh trực tiếp cho Gemini điều khiển robot
 
-Kế hoạch mới chỉ dùng skill mức cao và gắn với đúng version camera:
-
-```json
-{
-  "scene_version": 7,
-  "goal": {"object": "red_cube", "destination": "zone_b"},
-  "plan": [
-    {"skill": "check_zone", "zone": "zone_b"},
-    {"skill": "pick", "object": "blue_cube"},
-    {"skill": "place_temp", "object": "blue_cube", "slot": "temp_1"},
-    {"skill": "home"},
-    {"skill": "pick", "object": "red_cube"},
-    {"skill": "place", "object": "red_cube", "zone": "zone_b"},
-    {"skill": "home"}
-  ]
-}
-```
-
-`validate_state_aware_plan()` từ chối plan nếu zone chưa được kiểm tra, zone
-hoặc temp slot đang bị chiếm, object không thấy/confidence thấp, scene version
-đã đổi, gripper giữ sai vật, plan không đạt goal hoặc chứa điều khiển joint.
-
-## Chạy end-to-end — Milestone 7
-
-Kiểm tra offline bằng mock planner, không cần API key:
+Không ghi API key vào source hoặc README. Nhập key ẩn trong terminal:
 
 ```bash
-cd ~/Interaction/UR3e_LLM_Gripper_Camera_Bai03
-source /opt/ros/humble/setup.bash
-source install/setup.bash
-
-ros2 launch ur3_robot_skills end_to_end.launch.py \
-  planner:=mock \
-  command:='Đưa khối đỏ sang vùng B.'
-```
-
-Launch mặc định dùng `scene_blocked.yaml`: camera thấy `blue_cube` đang chiếm
-`zone_b`; planner phải sinh chuỗi dọn vật sang `temp_1` trước. Thành công khi
-terminal in đủ 7 skill `SUCCESS` và dòng cuối là `TASK SUCCESS`.
-
-Để dùng Gemini, nhập key ẩn rồi đổi planner:
-
-```bash
+unset GEMINI_API_KEY
 read -rsp "Nhập Gemini API key: " GEMINI_API_KEY
 echo
 export GEMINI_API_KEY
-
-ros2 launch ur3_robot_skills end_to_end.launch.py \
-  planner:=gemini \
-  command:='Đưa khối đỏ sang vùng B.'
+export GEMINI_MODEL="gemini-3.5-flash-lite"
 ```
 
-Planner chỉ chọn skill và tham số. MoveIt vẫn tự lập trajectory, kiểm tra va
-chạm và giới hạn khớp; LLM không được sinh joint trajectory.
-
-## Chạy kiểm thử gripper vật lý — Milestone 2
-
-Launch sau khởi động Gazebo, MoveIt, action server và tự chạy
-`pick(red_cube) → place(red_cube, zone_a)`:
+### Cách 1 — Gemini chạy toàn bộ demo bằng một lệnh
 
 ```bash
-cd ~/Interaction/UR3e_LLM_Gripper_Camera_Bai03
+cd ~/Interaction/Llm_robot_arm_gripper
+PLANNER=gemini \
+COMMAND='Đưa khối đỏ sang vùng B.' \
+./scripts/run_demo.sh
+```
+
+Script dùng `scene_blocked.yaml`, vì vậy Gemini phải sinh kế hoạch dọn vật đang
+chiếm zone trước khi thực hiện yêu cầu chính.
+
+### Cách 2 — gửi nhiều lệnh Gemini trong cùng một scene
+
+Khởi động hệ thống ở Terminal 1 theo mục 3 hoặc mục 4. Trong Terminal 2, source
+môi trường, nhập API key rồi gửi lệnh:
+
+```bash
+cd ~/Interaction/Llm_robot_arm_gripper
 source /opt/ros/humble/setup.bash
 source install/setup.bash
-ros2 launch ur3_robot_skills robot_skills.launch.py
+
+ros2 run ur3_robot_skills execute_plan \
+  --command 'Đặt khối tím vào ô A.' \
+  --planner gemini \
+  --step-timeout-seconds 300
 ```
 
-Thành công được xác nhận bằng dòng:
-
-```text
-MILESTONE 2 SUCCESS: red_cube was physically placed in zone_a
-```
-
-## Kết quả cần thấy
-
-- Gazebo có `red_cube`, `yellow_cube`, `blue_cube`, `green_cube` và
-  `purple_cube` trên bàn.
-- RViz có nhãn `zone_a`, `zone_b`, `zone_c` và `temp_1` trên topic
-  `/scene_markers`.
-- RViz có ảnh từ camera trên cao; năm block đều nằm trong khung ảnh.
-- Với `scene_blocked.yaml`, tâm `blue_cube` ở `(0.32, 0.06, 0.18)`, ngay trên
-  `zone_b`; `red_cube` vẫn ở `(0.20, 0.18, 0.18)`.
-
-## Chạy test
+Sau khi lệnh trên hoàn tất, có thể yêu cầu đặt khối đỏ vào chính ô A:
 
 ```bash
-cd ~/Interaction/UR3e_LLM_Gripper_Camera_Bai03
-source /opt/ros/humble/setup.bash
-PYTHONPATH=$PWD/src/ur3_llm_control:$PWD/src/ur3_perception:$PYTHONPATH \
-  /usr/bin/python3 -m pytest -q \
-    src/ur3_llm_control/test \
-    src/ur3_perception/test \
-    src/ur3_workcell_description/test \
-    src/ur_simulation_gz/test
+ros2 run ur3_robot_skills execute_plan \
+  --command 'Đặt khối đỏ vào ô A.' \
+  --planner gemini \
+  --step-timeout-seconds 300
 ```
 
-Kế hoạch đầy đủ nằm tại [docs/BAI_03_MILESTONES.md](docs/BAI_03_MILESTONES.md).
+Camera sẽ cung cấp trạng thái scene hiện tại cho Gemini. Nếu `purple_cube` đang
+chiếm `zone_a`, kế hoạch hợp lệ phải dọn khối tím tới vị trí tạm trước, rồi mới
+gắp và đặt khối đỏ.
+
+Một số câu lệnh Gemini có thể dùng:
+
+```text
+Đặt khối vàng vào ô B.
+Di chuyển khối xanh dương sang vùng C.
+Đưa khối tím ra vị trí tạm rồi đặt khối đỏ vào ô A.
+Sắp xếp tất cả các khối theo mã sinh viên của tôi.
+Put the green cube in Zone A.
+```
+
+LLM chỉ sinh tên skill, object, zone và thứ tự thực hiện. MoveIt 2 vẫn chịu
+trách nhiệm tính IK, collision checking và joint trajectory.
+
+## 6. Tên object và vị trí hợp lệ
+
+Object:
+
+```text
+red_cube
+yellow_cube
+blue_cube
+green_cube
+purple_cube
+```
+
+Zone và vị trí tạm:
+
+```text
+zone_a
+zone_b
+zone_c
+temp_1
+```
+
+Planner có thể hiểu các cách gọi tiếng Việt như “khối đỏ”, “khối vàng”, “khối
+xanh dương”, “khối xanh lá”, “khối tím”, “ô A”, “vùng B” và “zone C”.
+
+## 7. Xem trạng thái camera
+
+Khi hệ thống đang chạy, mở terminal khác:
+
+```bash
+cd ~/Interaction/Llm_robot_arm_gripper
+source /opt/ros/humble/setup.bash
+source install/setup.bash
+
+ros2 service call /get_scene_state std_srvs/srv/Trigger '{}'
+```
+
+Kết quả JSON cho biết block nào đang trên bàn, trong zone hoặc trong `temp_1`,
+cùng confidence của camera.
+
+## 8. Dừng hệ thống
+
+Nhấn `Ctrl+C` tại terminal đang chạy launch. Nếu Gazebo hoặc RViz cũ vẫn còn:
+
+```bash
+pkill -INT -f 'rviz2|ign gazebo|gz sim|ruby.*ignition' || true
+sleep 3
+```
+
+Sau đó mới mở phiên chạy mới để tránh nhận dữ liệu từ scene cũ.
+
+## 9. Lỗi thường gặp
+
+### Chưa build workspace
+
+Nếu báo thiếu `install/setup.bash`:
+
+```bash
+cd ~/Interaction/Llm_robot_arm_gripper
+./scripts/build_humble.sh
+```
+
+### Thiếu model Robotiq
+
+```bash
+cd ~/Interaction/Llm_robot_arm_gripper
+mkdir -p third_party
+vcs import third_party < dependencies.repos
+./scripts/build_humble.sh
+```
+
+### Gemini báo thiếu thư viện
+
+```bash
+python3 -m pip install --user google-genai
+```
+
+### Gemini báo `401`
+
+API key sai, hết hiệu lực hoặc chưa được export. Nhập lại bằng `read -rsp` như
+mục 5.
+
+### Gemini báo `429`
+
+Project Gemini đang hết quota hoặc bị giới hạn request. Kiểm tra quota trong
+Google AI Studio, hoặc chạy tạm với `--planner mock`.
+
+### Robot dừng lâu ở một bước
+
+Giữ `--step-timeout-seconds 300`, kiểm tra Gazebo không bị pause và không chạy
+nhiều phiên Gazebo/RViz cùng lúc.
